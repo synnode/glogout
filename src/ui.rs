@@ -2,50 +2,99 @@ use crate::config::{Button, Config};
 use std::path::Path;
 
 pub const DEFAULT_CSS: &str = r#"
+:root {
+  --bg: rgba(18, 18, 22, 0.6);
+  --fg: #f2f2f2;
+  --muted: rgba(255, 255, 255, 0.55);
+  --button-bg: rgba(255, 255, 255, 0.05);
+  --button-bg-hover: rgba(255, 255, 255, 0.1);
+  --button-border: rgba(255, 255, 255, 0.1);
+  --button-border-hover: rgba(255, 255, 255, 0.25);
+  --accent: #7aa7ff;
+}
 html, body {
   margin: 0;
   height: 100%;
   width: 100%;
-  background: rgba(0, 0, 0, 0.55);
-  color: #f0f0f0;
+  background: var(--bg);
+  color: var(--fg);
   font-family: system-ui, sans-serif;
 }
 body {
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
+  animation: glogout-enter 180ms ease-out;
+}
+@keyframes glogout-enter {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body { animation: none; }
+  button { transition: none; }
+}
+.layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.75rem;
 }
 .menu {
   display: grid;
   grid-auto-flow: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 button {
+  position: relative;
   appearance: none;
-  background: rgba(255, 255, 255, 0.06);
-  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: var(--button-bg);
+  border: 1px solid var(--button-border);
   color: inherit;
   font: inherit;
-  font-size: 1.4rem;
-  padding: 3rem 4rem;
-  border-radius: 1rem;
+  font-size: 1.2rem;
+  padding: 3rem 3.5rem;
+  min-width: 9rem;
+  border-radius: 0.85rem;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition: background 140ms ease, border-color 140ms ease,
+              transform 140ms ease, box-shadow 140ms ease;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
   align-items: center;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset,
+              0 8px 24px rgba(0, 0, 0, 0.25);
 }
-button:hover, button:focus {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.4);
+button:hover {
+  background: var(--button-bg-hover);
+  border-color: var(--button-border-hover);
+  transform: translateY(-2px);
+}
+button:focus-visible {
   outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(122, 167, 255, 0.4),
+              0 8px 24px rgba(0, 0, 0, 0.3);
 }
-button:active { transform: scale(0.97); }
-.icon { font-size: 2.5rem; line-height: 1; }
-.layout { display: flex; flex-direction: column; align-items: center; }
-.hint { margin-top: 2rem; font-size: 0.9rem; opacity: 0.6; }
+button:active { transform: translateY(0); }
+.icon { font-size: 2.4rem; line-height: 1; }
+.kbd {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.hint { font-size: 0.8rem; color: var(--muted); letter-spacing: 0.02em; }
 "#;
 
 pub const DEFAULT_TEMPLATE: &str = r#"<!doctype html>
@@ -57,7 +106,7 @@ pub const DEFAULT_TEMPLATE: &str = r#"<!doctype html>
 <body>
   <div class="layout">
     <div class="menu">{{buttons}}</div>
-    <div class="hint">Click a button or press its keybind · Esc to cancel</div>
+    <div class="hint">Press a key, click a button, or hit Esc to cancel</div>
   </div>
   <script>{{script}}</script>
 </body>
@@ -123,9 +172,14 @@ fn render_button(btn: &Button, autofocus: bool) -> String {
         .map(escape)
         .map(|s| format!("<span class=\"icon\">{s}</span>"))
         .unwrap_or_default();
+    let kbd_badge = if keybind.is_empty() {
+        String::new()
+    } else {
+        format!("<span class=\"kbd\">{keybind}</span>")
+    };
     let autofocus = if autofocus { " autofocus" } else { "" };
     format!(
-        "<button data-action=\"{id}\" data-keybind=\"{keybind}\"{autofocus}>{icon}<span>{label}</span></button>"
+        "<button data-action=\"{id}\" data-keybind=\"{keybind}\"{autofocus}>{kbd_badge}{icon}<span>{label}</span></button>"
     )
 }
 

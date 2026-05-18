@@ -213,10 +213,10 @@ Success criterion: pressing the keybind I'll wire up in KWin shows the menu, cli
 ### Phase 3: Polish
 
 - [ ] Hot reload on config file change (`notify` crate watcher)
-- [ ] Fade-in animation, `prefers-reduced-motion` respect
-- [ ] Multi-monitor output selection
-- [ ] Reference theme that's actually nice
-- [ ] Error messages that don't suck (clear failure when compositor lacks layer-shell)
+- [x] Fade-in animation, `prefers-reduced-motion` respect
+- [x] Multi-monitor output selection — menu surface on the chosen output (`settings.output` or first listed), dimmer surfaces on every other output for a modal "all-screens-dim" feel. wlogout-style.
+- [x] Reference theme that's actually nice
+- [x] Error messages that don't suck (clear failure when compositor lacks layer-shell)
 
 ### Phase 4: Daemon mode (deferred)
 

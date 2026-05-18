@@ -2,15 +2,12 @@ mod action;
 mod config;
 mod init;
 mod ui;
+mod window;
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use gtk4::glib::{self, MainLoop};
-use gtk4::prelude::*;
-use gtk4::{EventControllerKey, Window, gdk};
-use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
-use webkit6::prelude::*;
-use webkit6::{UserContentManager, WebView};
+use gtk4::glib::MainLoop;
+use webkit6::UserContentManager;
 
 use crate::action::Dispatcher;
 
@@ -37,31 +34,30 @@ fn main() -> Result<()> {
         return init::run(force);
     }
 
-    gtk4::init()?;
+    gtk4::init().context("GTK4 initialization failed (is DISPLAY/WAYLAND_DISPLAY set?)")?;
+
+    if !gtk4_layer_shell::is_supported() {
+        bail!(
+            "this compositor does not implement wlr-layer-shell; glogout needs it to anchor as a fullscreen overlay.\n\
+             Known working: Hyprland, KWin (Plasma 6), Sway. GNOME does not implement layer-shell."
+        );
+    }
 
     let loaded = config::load();
     let dispatcher = Dispatcher::new(&loaded.config.buttons);
     let built = ui::build(&loaded.config, loaded.dir.as_deref());
 
+    let monitors = window::enumerate_monitors();
+    if monitors.is_empty() {
+        bail!("no monitors found via GDK; cannot anchor any layer-shell surface");
+    }
+    let menu_monitor = window::pick_menu_monitor(&monitors, loaded.config.settings.output.as_deref())
+        .context("could not pick a menu monitor")?
+        .clone();
+
+    window::install_dimmer_css();
+
     let main_loop = MainLoop::new(None, false);
-    let window = Window::new();
-    window.set_decorated(false);
-
-    window.init_layer_shell();
-    window.set_layer(Layer::Overlay);
-    for edge in [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left] {
-        window.set_anchor(edge, true);
-    }
-    window.set_keyboard_mode(KeyboardMode::Exclusive);
-    window.set_namespace(Some("glogout"));
-    window.set_exclusive_zone(-1);
-
-    if let Some(name) = loaded.config.settings.output.as_deref() {
-        match pick_monitor(name) {
-            Some(monitor) => window.set_monitor(Some(&monitor)),
-            None => eprintln!("glogout: output {name:?} not found; using default"),
-        }
-    }
 
     let manager = UserContentManager::new();
     manager.register_script_message_handler("ipc", None);
@@ -73,39 +69,25 @@ fn main() -> Result<()> {
         });
     }
 
-    let webview = WebView::builder()
-        .user_content_manager(&manager)
-        .build();
-    webview.set_background_color(&gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
-    webview.load_html(&built.html, None);
-    window.set_child(Some(&webview));
-
-    if loaded.config.settings.close_on_escape {
-        let key_controller = EventControllerKey::new();
-        let main_loop = main_loop.clone();
-        key_controller.connect_key_pressed(move |_, key, _, _| {
-            if key == gdk::Key::Escape {
-                main_loop.quit();
-            }
-            glib::Propagation::Proceed
-        });
-        window.add_controller(key_controller);
+    // Keep all surfaces alive for the lifetime of the main loop. They're
+    // GObject ref-counted, so dropping the Vec at exit lets gtk clean up.
+    let mut _surfaces = Vec::with_capacity(monitors.len());
+    _surfaces.push(window::build_menu(
+        &menu_monitor,
+        &built.html,
+        &manager,
+        &main_loop,
+        loaded.config.settings.close_on_escape,
+    ));
+    for monitor in &monitors {
+        if monitor != &menu_monitor {
+            _surfaces.push(window::build_dimmer(monitor));
+        }
     }
 
     // TODO settings.close_on_focus_loss: focus events under
     // KeyboardMode::Exclusive don't fire predictably; needs investigation.
 
-    window.present();
     main_loop.run();
     Ok(())
-}
-
-fn pick_monitor(name: &str) -> Option<gdk::Monitor> {
-    let display = gdk::Display::default()?;
-    let monitors = display.monitors();
-    (0..monitors.n_items()).find_map(|i| {
-        let monitor = monitors.item(i)?.downcast::<gdk::Monitor>().ok()?;
-        let connector = monitor.connector()?;
-        (connector.as_str() == name).then_some(monitor)
-    })
 }
