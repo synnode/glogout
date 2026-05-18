@@ -204,11 +204,11 @@ Success criterion: pressing the keybind I'll wire up in KWin shows the menu, cli
 
 ### Phase 2: Configurability (target: a few more sessions)
 
-- [ ] Load `config.toml` from XDG paths
-- [ ] Load `style.css` and pass its path into the template
-- [ ] Optional `template.html` with `{{buttons}}` expansion
-- [ ] Keybind handling driven by config
-- [ ] Built-in action resolution + arbitrary command support
+- [x] Load `config.toml` from XDG paths
+- [x] Load `style.css` and pass its path into the template
+- [x] Optional `template.html` with `{{buttons}}` expansion
+- [x] Keybind handling driven by config
+- [x] Built-in action resolution + arbitrary command support
 
 ### Phase 3: Polish
 
