@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "codeatlas": {
+      "type": "stdio",
+      "command": "codeatlas",
+      "args": [],
+      "env": {
+        "WIKI_ROOT": ".wiki",
+        "RAW_ROOT": ".docs",
+        "OLLAMA_URL": "${SYNNODE_OLLAMA}",
+        "OLLAMA_MODEL": "nomic-embed-text"
+      }
+    }
+  }
+}
