@@ -223,7 +223,7 @@ Success criterion: pressing the keybind I'll wire up in KWin shows the menu, cli
 - [x] Unix socket server in daemon mode (`glogout daemon`)
 - [x] `glogout show` client subcommand (subcommand chosen over `--show` for consistency with `glogout init`)
 - [x] systemd user unit in `contrib/glogout.service`
-- [ ] Document tradeoffs in README
+- [x] Document tradeoffs in README
 
 ## Risks & unknowns
 
