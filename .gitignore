@@ -1,5 +1,6 @@
 # Rust build artifacts
 /target
+.idea
 
 # CodeAtlas wiki: keep the markdown pages, ignore generated index
 .wiki/.embeddings.db

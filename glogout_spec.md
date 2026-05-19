@@ -212,7 +212,7 @@ Success criterion: pressing the keybind I'll wire up in KWin shows the menu, cli
 
 ### Phase 3: Polish
 
-- [ ] Hot reload on config file change (`notify` crate watcher)
+- [x] Hot reload on config file change (`notify` crate watcher) — also reloads `style.css` and `template.html`
 - [x] Fade-in animation, `prefers-reduced-motion` respect
 - [x] Multi-monitor output selection — menu surface on the chosen output (`settings.output` or first listed), dimmer surfaces on every other output for a modal "all-screens-dim" feel. wlogout-style.
 - [x] Reference theme that's actually nice

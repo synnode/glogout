@@ -104,6 +104,15 @@ pub fn load() -> Loaded {
     Loaded { config: Config::default(), dir: None }
 }
 
+/// Re-read and parse `config.toml` from a known directory. Used by hot
+/// reload, which already knows which dir we resolved at startup and has
+/// no reason to re-walk the search paths.
+pub fn load_from(dir: &std::path::Path) -> Result<Config, String> {
+    let path = dir.join("config.toml");
+    let text = fs::read_to_string(&path).map_err(|e| format!("{} read error: {e}", path.display()))?;
+    toml::from_str::<Config>(&text).map_err(|e| format!("{} parse error: {e}", path.display()))
+}
+
 fn search_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if let Ok(xdg) = env::var("XDG_CONFIG_HOME") {

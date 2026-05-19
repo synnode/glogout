@@ -19,13 +19,15 @@ fn anchor_to(window: &Window, monitor: &gdk::Monitor, keyboard: KeyboardMode) {
 }
 
 /// The window that hosts the actual menu UI. Exactly one of these per run.
+/// Returns both the window and the inner webview — the webview is exposed
+/// so hot reload can call `load_html` on it after the program is up.
 pub fn build_menu(
     monitor: &gdk::Monitor,
     html: &str,
     manager: &UserContentManager,
     main_loop: &MainLoop,
     close_on_escape: bool,
-) -> Window {
+) -> (Window, WebView) {
     let window = Window::new();
     window.set_decorated(false);
     anchor_to(&window, monitor, KeyboardMode::Exclusive);
@@ -50,7 +52,7 @@ pub fn build_menu(
     }
 
     window.present();
-    window
+    (window, webview)
 }
 
 /// A lightweight dimmer surface for non-menu monitors. No webview, no
