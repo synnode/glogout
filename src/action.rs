@@ -1,5 +1,4 @@
 use crate::config::Button;
-use gtk4::glib::MainLoop;
 use std::collections::HashMap;
 use std::process::Command;
 
@@ -31,7 +30,10 @@ impl Dispatcher {
         Self { by_id }
     }
 
-    pub fn dispatch(&self, action_id: &str, main_loop: &MainLoop) {
+    /// Execute the side-effects for an action and return. The caller
+    /// decides what to do after — one-shot mode quits the main loop,
+    /// daemon mode hides the surfaces.
+    pub fn dispatch(&self, action_id: &str) {
         match self.by_id.get(action_id) {
             Some(Resolved::Cancel) => {}
             Some(Resolved::Spawn(spec)) => {
@@ -46,7 +48,6 @@ impl Dispatcher {
                 eprintln!("glogout: no button registered for action {action_id:?}");
             }
         }
-        main_loop.quit();
     }
 }
 

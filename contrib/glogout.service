@@ -1,0 +1,13 @@
+[Unit]
+Description=glogout daemon (warm webview for instant logout menu)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/glogout daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

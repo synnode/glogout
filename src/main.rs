@@ -1,21 +1,25 @@
 mod action;
 mod config;
+mod daemon;
 mod init;
 mod ui;
 mod watch;
 mod window;
 
 use std::cell::RefCell;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
+use gtk4::Window;
 use gtk4::glib::{self, MainLoop};
+use gtk4::prelude::*;
 use webkit6::prelude::*;
 use webkit6::{UserContentManager, WebView};
 
 use crate::action::Dispatcher;
+use crate::window::EscapeHook;
 
 #[derive(Parser)]
 #[command(version, about = "Themable Wayland logout menu", long_about = None)]
@@ -32,14 +36,63 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// Run as a long-lived background service. A subsequent `glogout show`
+    /// reveals the menu without re-spawning the webview.
+    Daemon,
+    /// Reveal a running daemon's menu. Errors out if no daemon is reachable.
+    Show,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    if let Some(Command::Init { force }) = cli.command {
-        return init::run(force);
+    match cli.command {
+        Some(Command::Init { force }) => init::run(force),
+        Some(Command::Show) => daemon::client_send("show"),
+        Some(Command::Daemon) => run_daemon(),
+        None => run_one_shot(),
+    }
+}
+
+/// Everything that survives between invocations in daemon mode and that
+/// the one-shot path also wants: the GTK main loop, the constructed
+/// surfaces, the webview that hosts the menu, the live dispatcher, and
+/// the config dir (used by the hot-reload watcher).
+struct App {
+    main_loop: MainLoop,
+    surfaces: Vec<Window>,
+    webview: WebView,
+    dispatcher: Rc<RefCell<Dispatcher>>,
+    config_dir: Option<PathBuf>,
+    manager: UserContentManager,
+    escape_hook: EscapeHook,
+    close_on_escape: bool,
+}
+
+impl App {
+    fn show(&self) {
+        for surface in &self.surfaces {
+            surface.present();
+        }
     }
 
+    fn hide(&self) {
+        for surface in &self.surfaces {
+            surface.set_visible(false);
+        }
+    }
+
+    /// Replace the Escape callback. `close_on_escape = false` in the
+    /// config means we ignore the assignment so users can't accidentally
+    /// re-enable it via daemon wiring.
+    fn set_escape_hook<F: Fn() + 'static>(&self, hook: F) {
+        if !self.close_on_escape {
+            return;
+        }
+        *self.escape_hook.borrow_mut() = Some(Box::new(hook));
+    }
+}
+
+fn build_app() -> Result<App> {
     gtk4::init().context("GTK4 initialization failed (is DISPLAY/WAYLAND_DISPLAY set?)")?;
 
     if !gtk4_layer_shell::is_supported() {
@@ -68,53 +121,111 @@ fn main() -> Result<()> {
 
     let manager = UserContentManager::new();
     manager.register_script_message_handler("ipc", None);
-    {
-        let dispatcher = dispatcher.clone();
-        let main_loop = main_loop.clone();
-        manager.connect_script_message_received(Some("ipc"), move |_, value| {
-            dispatcher.borrow().dispatch(value.to_str().as_str(), &main_loop);
-        });
-    }
 
-    // Keep all surfaces alive for the lifetime of the main loop. They're
-    // GObject ref-counted, so dropping the Vec at exit lets gtk clean up.
-    let mut _surfaces = Vec::with_capacity(monitors.len());
-    let (menu_window, menu_webview) = window::build_menu(
-        &menu_monitor,
-        &built.html,
-        &manager,
-        &main_loop,
-        loaded.config.settings.close_on_escape,
-    );
-    _surfaces.push(menu_window);
+    let escape_hook: EscapeHook = Rc::new(RefCell::new(None));
+    let (menu_window, menu_webview) =
+        window::build_menu(&menu_monitor, &built.html, &manager, escape_hook.clone());
+
+    let mut surfaces = Vec::with_capacity(monitors.len());
+    surfaces.push(menu_window);
     for monitor in &monitors {
         if monitor != &menu_monitor {
-            _surfaces.push(window::build_dimmer(monitor));
+            surfaces.push(window::build_dimmer(monitor));
         }
     }
-
-    // Hot reload watcher. Only meaningful when we resolved a real config
-    // dir — defaults are baked into the binary so there's nothing to
-    // watch. Kept alive in a binding so the watcher thread isn't dropped.
-    let _watch_handle = config_dir.as_deref().and_then(install_watch(dispatcher.clone(), menu_webview));
 
     // TODO settings.close_on_focus_loss: focus events under
     // KeyboardMode::Exclusive don't fire predictably; needs investigation.
 
-    main_loop.run();
+    Ok(App {
+        main_loop,
+        surfaces,
+        webview: menu_webview,
+        dispatcher,
+        config_dir,
+        manager,
+        escape_hook,
+        close_on_escape: loaded.config.settings.close_on_escape,
+    })
+}
+
+fn run_one_shot() -> Result<()> {
+    let app = build_app()?;
+
+    let main_loop = app.main_loop.clone();
+    app.set_escape_hook(move || main_loop.quit());
+
+    {
+        let dispatcher = app.dispatcher.clone();
+        let main_loop = app.main_loop.clone();
+        app.manager
+            .connect_script_message_received(Some("ipc"), move |_, value| {
+                dispatcher.borrow().dispatch(value.to_str().as_str());
+                main_loop.quit();
+            });
+    }
+
+    let _watch = install_watch(&app);
+    app.show();
+    app.main_loop.run();
     Ok(())
 }
 
-/// Returns a closure that installs a watcher on a given dir and spawns
-/// the reload listener on the GTK main context. Curried so the caller
-/// can use `Option::and_then` for the no-config-dir case.
-fn install_watch(
-    dispatcher: Rc<RefCell<Dispatcher>>,
-    webview: WebView,
-) -> impl FnOnce(&Path) -> Option<watch::Handle> {
-    move |dir: &Path| match watch::spawn(dir) {
+fn run_daemon() -> Result<()> {
+    // Bind the socket before doing GTK work — fail fast on a duplicate
+    // daemon, before we spin up a webview process we'd then have to tear
+    // back down.
+    let (_socket_guard, commands) = daemon::spawn_server()?;
+
+    let app = Rc::new(build_app()?);
+
+    {
+        let app_for_closure = app.clone();
+        app.set_escape_hook(move || app_for_closure.hide());
+    }
+
+    {
+        let app_for_closure = app.clone();
+        app.manager
+            .connect_script_message_received(Some("ipc"), move |_, value| {
+                app_for_closure
+                    .dispatcher
+                    .borrow()
+                    .dispatch(value.to_str().as_str());
+                app_for_closure.hide();
+            });
+    }
+
+    let _watch = install_watch(&app);
+
+    // Listen for socket commands and translate Show into surface presents.
+    {
+        let app = app.clone();
+        glib::MainContext::default().spawn_local(async move {
+            while let Ok(cmd) = commands.recv().await {
+                match cmd {
+                    daemon::Command::Show => app.show(),
+                }
+            }
+        });
+    }
+
+    // Daemon starts with surfaces built but hidden; user invokes
+    // `glogout show` to reveal them.
+    app.main_loop.run();
+    Ok(())
+}
+
+/// Install the hot-reload watcher on `app.config_dir` if we have one.
+/// Returns the watcher handle, which the caller is expected to keep
+/// alive (drop = stop watching).
+fn install_watch(app: &App) -> Option<watch::Handle> {
+    let dir = app.config_dir.as_deref()?;
+    match watch::spawn(dir) {
         Ok((handle, rx)) => {
             let dir = dir.to_path_buf();
+            let dispatcher = app.dispatcher.clone();
+            let webview = app.webview.clone();
             glib::MainContext::default().spawn_local(async move {
                 while rx.recv().await.is_ok() {
                     reload(&dir, &dispatcher, &webview);

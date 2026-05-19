@@ -1,4 +1,4 @@
-use gtk4::glib::{self, MainLoop};
+use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{CssProvider, EventControllerKey, Window, gdk};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
@@ -18,15 +18,28 @@ fn anchor_to(window: &Window, monitor: &gdk::Monitor, keyboard: KeyboardMode) {
     window.set_exclusive_zone(-1);
 }
 
+/// Late-bound Escape handler. The menu window installs a key controller
+/// at construction time, but the actual behavior (quit vs. hide) is only
+/// known once the runner sets it. The window holds an `Rc<RefCell<_>>`
+/// so the handler can be swapped without touching GTK plumbing.
+pub type EscapeHook = std::rc::Rc<std::cell::RefCell<Option<Box<dyn Fn()>>>>;
+
 /// The window that hosts the actual menu UI. Exactly one of these per run.
 /// Returns both the window and the inner webview — the webview is exposed
 /// so hot reload can call `load_html` on it after the program is up.
+///
+/// The window is not presented here — callers `present()` it themselves
+/// once they are ready to map the layer-shell surface (one-shot maps
+/// immediately; daemon waits for a `show` command).
+///
+/// `escape_hook` is consulted on every Escape press; if it holds `Some`,
+/// the callback fires. One-shot fills it with `main_loop.quit`; daemon
+/// fills it with `app.hide`.
 pub fn build_menu(
     monitor: &gdk::Monitor,
     html: &str,
     manager: &UserContentManager,
-    main_loop: &MainLoop,
-    close_on_escape: bool,
+    escape_hook: EscapeHook,
 ) -> (Window, WebView) {
     let window = Window::new();
     window.set_decorated(false);
@@ -39,31 +52,29 @@ pub fn build_menu(
     webview.load_html(html, None);
     window.set_child(Some(&webview));
 
-    if close_on_escape {
-        let key_controller = EventControllerKey::new();
-        let main_loop = main_loop.clone();
-        key_controller.connect_key_pressed(move |_, key, _, _| {
-            if key == gdk::Key::Escape {
-                main_loop.quit();
-            }
-            glib::Propagation::Proceed
-        });
-        window.add_controller(key_controller);
-    }
+    let key_controller = EventControllerKey::new();
+    key_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == gdk::Key::Escape
+            && let Some(hook) = escape_hook.borrow().as_ref()
+        {
+            hook();
+        }
+        glib::Propagation::Proceed
+    });
+    window.add_controller(key_controller);
 
-    window.present();
     (window, webview)
 }
 
 /// A lightweight dimmer surface for non-menu monitors. No webview, no
 /// keyboard grab — just a flat semi-transparent background so the menu
 /// monitor stands out and the user understands the action is modal.
+/// Not presented — caller does that.
 pub fn build_dimmer(monitor: &gdk::Monitor) -> Window {
     let window = Window::new();
     window.set_decorated(false);
     window.add_css_class("glogout-dimmer");
     anchor_to(&window, monitor, KeyboardMode::None);
-    window.present();
     window
 }
 

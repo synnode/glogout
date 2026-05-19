@@ -218,11 +218,11 @@ Success criterion: pressing the keybind I'll wire up in KWin shows the menu, cli
 - [x] Reference theme that's actually nice
 - [x] Error messages that don't suck (clear failure when compositor lacks layer-shell)
 
-### Phase 4: Daemon mode (deferred)
+### Phase 4: Daemon mode
 
-- [ ] Unix socket server in daemon mode
-- [ ] `--show` client subcommand
-- [ ] systemd user unit in `contrib/`
+- [x] Unix socket server in daemon mode (`glogout daemon`)
+- [x] `glogout show` client subcommand (subcommand chosen over `--show` for consistency with `glogout init`)
+- [x] systemd user unit in `contrib/glogout.service`
 - [ ] Document tradeoffs in README
 
 ## Risks & unknowns
