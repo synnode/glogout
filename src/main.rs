@@ -41,6 +41,8 @@ enum Command {
     Daemon,
     /// Reveal a running daemon's menu. Errors out if no daemon is reachable.
     Show,
+    /// Show the menu if hidden, hide it if shown. Useful for a single keybind.
+    Toggle,
 }
 
 fn main() -> Result<()> {
@@ -48,6 +50,7 @@ fn main() -> Result<()> {
     match cli.command {
         Some(Command::Init { force }) => init::run(force),
         Some(Command::Show) => daemon::client_send("show"),
+        Some(Command::Toggle) => daemon::client_send("toggle"),
         Some(Command::Daemon) => run_daemon(),
         None => run_one_shot(),
     }
@@ -78,6 +81,23 @@ impl App {
     fn hide(&self) {
         for surface in &self.surfaces {
             surface.set_visible(false);
+        }
+    }
+
+    /// True when the menu surface is currently mapped. Used to decide
+    /// what `toggle` should do.
+    fn is_visible(&self) -> bool {
+        self.surfaces
+            .first()
+            .map(|s| s.is_visible())
+            .unwrap_or(false)
+    }
+
+    fn toggle(&self) {
+        if self.is_visible() {
+            self.hide();
+        } else {
+            self.show();
         }
     }
 
@@ -205,6 +225,7 @@ fn run_daemon() -> Result<()> {
             while let Ok(cmd) = commands.recv().await {
                 match cmd {
                     daemon::Command::Show => app.show(),
+                    daemon::Command::Toggle => app.toggle(),
                 }
             }
         });

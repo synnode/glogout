@@ -16,6 +16,7 @@ use async_channel::Receiver;
 #[derive(Debug)]
 pub enum Command {
     Show,
+    Toggle,
 }
 
 /// Resolve the socket path from `$XDG_RUNTIME_DIR`. Returns an error if
@@ -75,6 +76,9 @@ pub fn spawn_server() -> Result<(SocketGuard, Receiver<Command>)> {
             match line.trim() {
                 "show" => {
                     let _ = tx.send_blocking(Command::Show);
+                }
+                "toggle" => {
+                    let _ = tx.send_blocking(Command::Toggle);
                 }
                 "" => {}
                 other => eprintln!("glogout daemon: unknown command {other:?}"),

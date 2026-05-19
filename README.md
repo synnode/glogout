@@ -164,8 +164,11 @@ In one-shot mode the practical value is limited (the overlay covers all monitors
 glogout              one-shot menu
 glogout daemon       run as a background service
 glogout show         tell a running daemon to show
+glogout toggle       show if hidden, hide if shown (one keybind, both ways)
 glogout init         write default config files to ~/.config/glogout/
 ```
+
+Bind `glogout toggle` rather than `glogout show` if you want a single key to both summon and dismiss the menu.
 
 `glogout init --force` overwrites existing files.
 
