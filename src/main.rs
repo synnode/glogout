@@ -146,12 +146,15 @@ fn build_app() -> Result<App> {
     let (menu_window, menu_webview) =
         window::build_menu(&menu_monitor, &built.html, &manager, escape_hook.clone());
 
-    let mut surfaces = Vec::with_capacity(monitors.len());
+    // Dim every monitor and float the menu above on Layer::Overlay. We dim
+    // the menu's own monitor too: Hyprland ignores the menu's requested
+    // output and drops it on the focused screen, so we can't reliably know
+    // which monitor to leave undimmed. The layer split keeps the menu on top
+    // of its own dimmer regardless.
+    let mut surfaces = Vec::with_capacity(monitors.len() + 1);
     surfaces.push(menu_window);
     for monitor in &monitors {
-        if monitor != &menu_monitor {
-            surfaces.push(window::build_dimmer(monitor));
-        }
+        surfaces.push(window::build_dimmer(monitor));
     }
 
     // TODO settings.close_on_focus_loss: focus events under

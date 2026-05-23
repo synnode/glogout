@@ -214,7 +214,7 @@ Success criterion: pressing the keybind I'll wire up in KWin shows the menu, cli
 
 - [x] Hot reload on config file change (`notify` crate watcher) — also reloads `style.css` and `template.html`
 - [x] Fade-in animation, `prefers-reduced-motion` respect
-- [x] Multi-monitor output selection — menu surface on the chosen output (`settings.output` or first listed), dimmer surfaces on every other output for a modal "all-screens-dim" feel. wlogout-style.
+- [x] Multi-monitor output selection — menu surface (Layer::Overlay) on the chosen output (`settings.output`, else the (0,0) primary heuristic); dimmer surfaces (Layer::Top) on *every* output for a modal "all-screens-dim" feel. Dimming all outputs + the layer split keeps the menu visible even if the compositor places it on a different monitor than requested. wlogout-style. See `.wiki/MultiMonitorPlacement.md`.
 - [x] Reference theme that's actually nice
 - [x] Error messages that don't suck (clear failure when compositor lacks layer-shell)
 

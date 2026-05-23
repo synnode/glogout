@@ -6,9 +6,17 @@ use webkit6::prelude::*;
 use webkit6::{UserContentManager, WebView};
 
 /// Apply the layer-shell properties shared by both menu and dimmer surfaces.
-fn anchor_to(window: &Window, monitor: &gdk::Monitor, keyboard: KeyboardMode) {
+///
+/// The menu sits on `Layer::Overlay` and the dimmers on `Layer::Top`. That
+/// layer split is load-bearing: Hyprland places keyboard-interactive layer
+/// surfaces (the menu) on the *focused* output and ignores our requested
+/// monitor, so the menu can land on a monitor that also carries a dimmer.
+/// Overlay is globally above Top in the wlr-layer-shell stack, so the menu
+/// always renders on top of any dimmer regardless of which monitor it lands
+/// on or the order surfaces were mapped in.
+fn anchor_to(window: &Window, monitor: &gdk::Monitor, layer: Layer, keyboard: KeyboardMode) {
     window.init_layer_shell();
-    window.set_layer(Layer::Overlay);
+    window.set_layer(layer);
     window.set_monitor(Some(monitor));
     for edge in [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left] {
         window.set_anchor(edge, true);
@@ -43,7 +51,7 @@ pub fn build_menu(
 ) -> (Window, WebView) {
     let window = Window::new();
     window.set_decorated(false);
-    anchor_to(&window, monitor, KeyboardMode::Exclusive);
+    anchor_to(&window, monitor, Layer::Overlay, KeyboardMode::Exclusive);
 
     let webview = WebView::builder()
         .user_content_manager(manager)
@@ -66,15 +74,17 @@ pub fn build_menu(
     (window, webview)
 }
 
-/// A lightweight dimmer surface for non-menu monitors. No webview, no
-/// keyboard grab — just a flat semi-transparent background so the menu
-/// monitor stands out and the user understands the action is modal.
-/// Not presented — caller does that.
+/// A lightweight dimmer surface. No webview, no keyboard grab — just a flat
+/// semi-transparent background so every screen darkens and the action reads
+/// as modal. Built for *every* monitor (including the menu's): the menu sits
+/// on a higher layer and floats above its own monitor's dimmer, which keeps
+/// behavior correct even though we can't predict which output Hyprland will
+/// drop the keyboard-grabbing menu onto. Not presented — caller does that.
 pub fn build_dimmer(monitor: &gdk::Monitor) -> Window {
     let window = Window::new();
     window.set_decorated(false);
     window.add_css_class("glogout-dimmer");
-    anchor_to(&window, monitor, KeyboardMode::None);
+    anchor_to(&window, monitor, Layer::Top, KeyboardMode::None);
     window
 }
 
@@ -108,6 +118,12 @@ pub fn enumerate_monitors() -> Vec<gdk::Monitor> {
 /// Without a configured output, prefer the monitor at logical (0, 0) — that
 /// is conventionally the user's primary on both X11 and Wayland setups —
 /// and fall back to the first listed if no monitor sits at the origin.
+///
+/// Note: this is only a *hint*. Compositors that honor a layer surface's
+/// requested output (KWin, sway) will place the menu here; Hyprland ignores
+/// it for keyboard-interactive surfaces and uses the focused output instead.
+/// Either way the menu stays visible because every monitor is dimmed and the
+/// menu floats above on a higher layer.
 pub fn pick_menu_monitor<'a>(
     monitors: &'a [gdk::Monitor],
     wanted: Option<&str>,
