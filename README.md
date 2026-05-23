@@ -189,7 +189,7 @@ The stack is Linux-only on purpose. No `tao`, no `wry`. Earlier prototypes used 
 
 ## License
 
-TBD.
+MIT — see [LICENSE](LICENSE). Do whatever you want with it; just keep the copyright notice.
 
 ## Status
 
