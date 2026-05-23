@@ -1,21 +1,23 @@
 # glogout
 
-A heavily themable logout menu for `wlr-layer-shell` Wayland compositors. Renders its UI entirely in a webview so the system GTK theme never bleeds through — the only GTK surface is the invisible window that hosts the layer-shell handshake.
+**A Wayland logout menu you theme with real HTML, CSS, and JavaScript — zero GTK theme inheritance, ever.**
 
-Built as a drop-in alternative to [`wlogout`](https://github.com/ArtsyMacaw/wlogout) / `wleave` / `waylogout`, all of which use GTK widgets and therefore inherit your GTK theme.
+`glogout` renders its entire UI inside a WebKitGTK webview mounted in a `wlr-layer-shell` overlay. The only GTK surface is the invisible window that carries the layer-shell handshake; everything you see is a web page you fully control. Backdrop blur, web fonts, inline SVG, keyframe animations, JS — the whole web platform, with nothing inherited from your system.
+
+Every other Wayland logout menu — [`wlogout`](https://github.com/ArtsyMacaw/wlogout), [`wleave`](https://github.com/AMNatty/wleave), `waylogout`, [`powermenu`](https://github.com/shelepuginivan/powermenu), `nwg-bar` — is built from GTK (or Qt) widgets and styled with that toolkit's narrow CSS dialect, so it inherits and fights your system theme. `glogout` sidesteps the problem by not using widgets at all.
 
 ## Why
 
-Themable logout menus on Linux are unreasonably hard. The existing tools render with GTK widgets, which pick up the system GTK theme by default. If your system theme is at odds with what you want the logout menu to look like, you lose. There is no good escape hatch.
+Themable logout menus on Linux are unreasonably hard. The existing tools render with GTK widgets that pick up the system GTK theme by default, and "style.css" there means GTK's CSS subset, not the real thing. If your system theme is at odds with what you want the menu to look like, you lose — there's no clean escape hatch.
 
-`glogout` solves this by rendering the menu in a `webkit6` WebView mounted inside a `gtk4-layer-shell` overlay window. The WebView is unaffected by GTK theming. You bring HTML, CSS, and a button definition; the menu inherits zero styling from anything else on your system.
+`glogout` rendering the menu in a `webkit6` WebView inside a `gtk4-layer-shell` overlay *is* that escape hatch. The WebView is untouched by GTK theming, and you get a real browser engine: anything you can do on a web page, you can do to your logout menu.
 
 ## Features
 
 - **Zero GTK theme bleed.** Your CSS is the only CSS.
 - **Hot reload.** Edit `config.toml`, `style.css`, or `template.html` and the menu re-renders in place. Debounced so editor save patterns don't spam reloads.
 - **Daemon mode.** A long-running `glogout daemon` keeps the webview warm; `glogout show` reveals the menu sub-frame. One-shot still works if you don't care about latency.
-- **Multi-monitor aware.** Menu on the chosen output, dimmer surfaces on every other monitor so the modal feel covers the whole session.
+- **Multi-monitor aware.** Every output dims and the menu floats on top wherever the compositor places it, so the modal feel covers the whole session no matter which screen it opens on.
 - **Sensible built-ins.** `logout`, `reboot`, `shutdown`, `suspend`, `hibernate`, `lock`, `cancel`. Everything else is an arbitrary shell command.
 - **Single static binary.** Rust. No runtime, no plugin host, no electron.
 
@@ -191,4 +193,4 @@ TBD.
 
 ## Status
 
-Pre-release. Phase 1–4 complete; the spec checklist is the authoritative roadmap. Bug reports and theming PRs welcome.
+`v0.2.0`. Phases 1–4 complete — config + theming, hot reload, daemon mode, multi-monitor. Daily-driven on Hyprland; the spec checklist is the authoritative roadmap. Bug reports and theming PRs welcome.
