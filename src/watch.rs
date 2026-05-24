@@ -30,7 +30,12 @@ pub fn spawn(dir: &Path) -> Result<(Handle, Receiver<()>)> {
 
     let mut debouncer = new_debouncer(DEBOUNCE, None, move |result: DebounceEventResult| match result {
         Ok(events) => {
-            let relevant = events.iter().any(|e| {
+            // Skip `Access` events (open/read/close). Our own reload() reads
+            // all three watched files, which emits inotify access events on
+            // them — and since the filter below matches on filename alone,
+            // those reads would re-trigger the watcher and spin a reload loop.
+            // Only content-changing events (create/modify/remove) reload.
+            let relevant = events.iter().filter(|e| !e.kind.is_access()).any(|e| {
                 e.paths.iter().any(|p| {
                     p.file_name()
                         .and_then(|s| s.to_str())
