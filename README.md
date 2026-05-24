@@ -32,9 +32,12 @@ Themable logout menus on Linux are unreasonably hard. The existing tools render 
 ```bash
 git clone https://github.com/synnode/glogout
 cd glogout
-cargo build --release
-install -Dm755 target/release/glogout ~/.cargo/bin/glogout
+make install        # builds, installs to ~/.cargo/bin + the systemd user unit
 ```
+
+`make install` warns if another `glogout` earlier in `PATH` would shadow the
+one it just installed. For a system-wide install: `make build && sudo make
+install PREFIX=/usr/local`. Run `make help` for all targets.
 
 Or — once published — `cargo install glogout`.
 
