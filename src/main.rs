@@ -6,7 +6,7 @@ mod ui;
 mod watch;
 mod window;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -19,7 +19,7 @@ use webkit6::prelude::*;
 use webkit6::{UserContentManager, WebView};
 
 use crate::action::Dispatcher;
-use crate::window::EscapeHook;
+use crate::window::{EscapeEnabled, EscapeHook};
 
 #[derive(Parser)]
 #[command(version, about = "Themable Wayland logout menu", long_about = None)]
@@ -68,7 +68,9 @@ struct App {
     config_dir: Option<PathBuf>,
     manager: UserContentManager,
     escape_hook: EscapeHook,
-    close_on_escape: bool,
+    /// Live `close_on_escape`. Gated at press time so hot reload can toggle it
+    /// without restarting; shared with the menu's key controller.
+    close_on_escape: EscapeEnabled,
     /// The application-scoped CSS provider carrying the dimmer fill and the
     /// menu-window transparency. Kept so hot reload can re-feed it with the
     /// updated dimmer settings instead of restarting the daemon. `None` only
@@ -106,13 +108,10 @@ impl App {
         }
     }
 
-    /// Replace the Escape callback. `close_on_escape = false` in the
-    /// config means we ignore the assignment so users can't accidentally
-    /// re-enable it via daemon wiring.
+    /// Install the Escape callback. Whether it actually fires is decided at
+    /// press time by the live `close_on_escape` flag, so we always wire the
+    /// hook and let hot reload toggle the behavior.
     fn set_escape_hook<F: Fn() + 'static>(&self, hook: F) {
-        if !self.close_on_escape {
-            return;
-        }
         *self.escape_hook.borrow_mut() = Some(Box::new(hook));
     }
 }
@@ -151,8 +150,15 @@ fn build_app() -> Result<App> {
     manager.register_script_message_handler("ipc", None);
 
     let escape_hook: EscapeHook = Rc::new(RefCell::new(None));
-    let (menu_window, menu_webview) =
-        window::build_menu(&menu_monitor, &built.html, &manager, escape_hook.clone());
+    let close_on_escape: EscapeEnabled =
+        Rc::new(Cell::new(loaded.config.settings.close_on_escape));
+    let (menu_window, menu_webview) = window::build_menu(
+        &menu_monitor,
+        &built.html,
+        &manager,
+        escape_hook.clone(),
+        close_on_escape.clone(),
+    );
 
     // Dim every monitor and float the menu above on Layer::Overlay. We dim
     // the menu's own monitor too: Hyprland ignores the menu's requested
@@ -176,7 +182,7 @@ fn build_app() -> Result<App> {
         config_dir,
         manager,
         escape_hook,
-        close_on_escape: loaded.config.settings.close_on_escape,
+        close_on_escape,
         dimmer_provider,
     })
 }
@@ -260,9 +266,16 @@ fn install_watch(app: &App) -> Option<watch::Handle> {
             let dispatcher = app.dispatcher.clone();
             let webview = app.webview.clone();
             let dimmer_provider = app.dimmer_provider.clone();
+            let close_on_escape = app.close_on_escape.clone();
             glib::MainContext::default().spawn_local(async move {
                 while rx.recv().await.is_ok() {
-                    reload(&dir, &dispatcher, &webview, dimmer_provider.as_ref());
+                    reload(
+                        &dir,
+                        &dispatcher,
+                        &webview,
+                        dimmer_provider.as_ref(),
+                        &close_on_escape,
+                    );
                 }
             });
             Some(handle)
@@ -275,14 +288,16 @@ fn install_watch(app: &App) -> Option<watch::Handle> {
 }
 
 /// Re-read the config from `dir`, rebuild the menu HTML, swap the dispatcher
-/// in place, re-feed the dimmer CSS provider, and tell the webview to reload.
-/// Parse and read errors are logged and the previous state is kept — a
-/// half-edited config never bricks the open overlay.
+/// in place, re-feed the dimmer CSS provider, update the `close_on_escape`
+/// flag, and tell the webview to reload. Parse and read errors are logged and
+/// the previous state is kept — a half-edited config never bricks the open
+/// overlay.
 fn reload(
     dir: &Path,
     dispatcher: &Rc<RefCell<Dispatcher>>,
     webview: &WebView,
     dimmer_provider: Option<&CssProvider>,
+    close_on_escape: &EscapeEnabled,
 ) {
     let cfg = match config::load_from(dir) {
         Ok(c) => c,
@@ -293,6 +308,7 @@ fn reload(
     };
     let built = ui::build(&cfg, Some(dir));
     *dispatcher.borrow_mut() = Dispatcher::new(&cfg.buttons);
+    close_on_escape.set(cfg.settings.close_on_escape);
     // Update the live provider in place so dimmer changes take effect without
     // restarting the daemon; GTK restyles the existing dimmer surfaces.
     if let Some(provider) = dimmer_provider {

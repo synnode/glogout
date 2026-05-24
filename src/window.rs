@@ -32,6 +32,11 @@ fn anchor_to(window: &Window, monitor: &gdk::Monitor, layer: Layer, keyboard: Ke
 /// so the handler can be swapped without touching GTK plumbing.
 pub type EscapeHook = std::rc::Rc<std::cell::RefCell<Option<Box<dyn Fn()>>>>;
 
+/// Live `close_on_escape` toggle. Checked at key-press time rather than when
+/// the hook is installed, so hot reload can flip it without re-wiring the key
+/// controller.
+pub type EscapeEnabled = std::rc::Rc<std::cell::Cell<bool>>;
+
 /// The window that hosts the actual menu UI. Exactly one of these per run.
 /// Returns both the window and the inner webview — the webview is exposed
 /// so hot reload can call `load_html` on it after the program is up.
@@ -48,6 +53,7 @@ pub fn build_menu(
     html: &str,
     manager: &UserContentManager,
     escape_hook: EscapeHook,
+    escape_enabled: EscapeEnabled,
 ) -> (Window, WebView) {
     let window = Window::new();
     window.set_decorated(false);
@@ -68,6 +74,7 @@ pub fn build_menu(
     let key_controller = EventControllerKey::new();
     key_controller.connect_key_pressed(move |_, key, _, _| {
         if key == gdk::Key::Escape
+            && escape_enabled.get()
             && let Some(hook) = escape_hook.borrow().as_ref()
         {
             hook();

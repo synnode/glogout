@@ -57,7 +57,7 @@ This creates `~/.config/glogout/{config.toml,style.css,template.html}`.
 [settings]
 close_on_escape = true
 close_on_focus_loss = true     # reserved; currently a no-op
-# output = "DP-1"              # pin to a specific monitor (connector name)
+# output = "DP-1"              # pin to a specific monitor (needs daemon restart)
 # dimmer_color = "#121216"     # dimmer overlay color (#RRGGBB)
 # dimmer_opacity = 0.6         # 0.0 = see-through (shows desktop), 1.0 = opaque
 
@@ -161,7 +161,7 @@ systemctl --user enable --now glogout.service
 
 ## Hot reload
 
-The watcher is always on (in both one-shot and daemon mode) and triggers on changes to `config.toml`, `style.css`, or `template.html` in the resolved config directory. Reload is in-place: the webview's HTML is re-rendered, the button dispatcher is rebuilt, no process restart. Parse errors are logged and the previous state is kept, so a half-edited file never bricks an open overlay.
+The watcher is always on (in both one-shot and daemon mode) and triggers on changes to `config.toml`, `style.css`, or `template.html` in the resolved config directory. Reload is in-place: the webview's HTML is re-rendered, the button dispatcher is rebuilt, and `[settings]` are re-applied live — the dimmer (`dimmer_color`/`dimmer_opacity`) and `close_on_escape` all take effect on save, no process restart. The one exception is `output`, which rebuilds the layer surfaces and so needs a restart. Parse errors are logged and the previous state is kept, so a half-edited file never bricks an open overlay.
 
 In one-shot mode the practical value is limited (the overlay covers all monitors, so you can't reach an editor while it's open). The feature exists mostly as scaffolding for daemon mode, where it actually matters: edit your config while the daemon is hidden, then `glogout show` to see the result.
 
@@ -198,4 +198,4 @@ MIT — see [LICENSE](LICENSE). Do whatever you want with it; just keep the copy
 
 ## Status
 
-`v0.2.0`. Phases 1–4 complete — config + theming, hot reload, daemon mode, multi-monitor. Daily-driven on Hyprland; the spec checklist is the authoritative roadmap. Bug reports and theming PRs welcome.
+`v0.3.0`. Phases 1–4 complete — config + theming, hot reload, daemon mode, multi-monitor. Configurable dimmer and fully hot-reloadable `[settings]` (except `output`). Daily-driven on Hyprland; the spec checklist is the authoritative roadmap. Bug reports and theming PRs welcome.

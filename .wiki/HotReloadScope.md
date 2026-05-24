@@ -11,12 +11,14 @@ Hot reload (config + assets via `notify`) is implemented **before** daemon mode 
 
 ## Principle: settings should be hot-reloadable
 
-A `[settings]` change should take effect on save without restarting the daemon — restarting a long-lived service to tweak a value is undesirable. Treat "needs a daemon restart" as a gap to close, not acceptable behavior. When adding a setting, also wire it into `reload()`.
+A `[settings]` change should take effect on save without restarting the daemon — restarting a long-lived service to tweak a value is undesirable. Treat "needs a daemon restart" as a gap to close. When adding a setting, also wire it into `reload()`.
 
-- Buttons / actions / theme (css, template, html): reloaded — `reload()` rebuilds the HTML and swaps the `Dispatcher`.
-- `dimmer_color` / `dimmer_opacity`: reloaded — `App` keeps the surface `CssProvider`; `reload()` re-feeds it via `window::surface_css`, GTK restyles the live dimmer surfaces. See [[SurfaceTransparency]].
-- `close_on_escape`: **not yet** hot-reloaded (captured into `App.close_on_escape` at build). Closing the gap means re-applying it in `reload()`.
-- `output`: changing the monitor needs the surfaces rebuilt, so it is not a simple provider/HTML swap — out of scope for the in-place reload path.
+As of v0.3.0 everything reloads live except `output`:
+
+- Buttons / actions / theme (css, template, html): `reload()` rebuilds the HTML and swaps the `Dispatcher`.
+- `dimmer_color` / `dimmer_opacity`: `App` keeps the surface `CssProvider`; `reload()` re-feeds it via `window::surface_css`, GTK restyles the live dimmer surfaces. See [[SurfaceTransparency]].
+- `close_on_escape`: held as `EscapeEnabled` (`Rc<Cell<bool>>`) and gated at **key-press time**, not install time. The menu's key controller checks the cell; `reload()` calls `.set(...)`. `set_escape_hook` now always installs the hook (the cell decides whether it fires), so the daemon's hide-on-escape can be toggled live.
+- `output`: **restart-required by design.** Changing the monitor rebuilds the layer surfaces, which the in-place reload path doesn't do; and on Hyprland `set_monitor` is ignored for the keyboard-grabbing menu anyway, so a live re-anchor would have little value. Documented as restart-required in the init template and README.
 
 ## Decision
 

@@ -17,7 +17,8 @@ close_on_escape = true
 close_on_focus_loss = true
 
 # Pin the menu to a specific output by connector name (e.g. "DP-1").
-# Leave commented out to use the focused output.
+# Leave commented out to use the focused output. Unlike the other settings,
+# a change here needs a daemon restart (it rebuilds the layer surfaces).
 # output = "DP-1"
 
 # Dimmer overlay drawn behind the menu on every monitor. dimmer_color is
