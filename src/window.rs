@@ -51,6 +51,11 @@ pub fn build_menu(
 ) -> (Window, WebView) {
     let window = Window::new();
     window.set_decorated(false);
+    // GTK4 paints an opaque theme background on the window node. The webview
+    // child is set transparent (below), so without clearing the window's own
+    // background a fully transparent page would reveal this opaque fill
+    // instead of the dimmer beneath it. See `install_surface_css`.
+    window.add_css_class("glogout-menu");
     anchor_to(&window, monitor, Layer::Overlay, KeyboardMode::Exclusive);
 
     let webview = WebView::builder()
@@ -88,11 +93,18 @@ pub fn build_dimmer(monitor: &gdk::Monitor) -> Window {
     window
 }
 
-/// Install the dimmer-surface CSS at application scope. Idempotent enough
-/// for our one-shot usage — should be called once at startup.
-pub fn install_dimmer_css() {
+/// Install the layer-shell surface CSS at application scope. Idempotent
+/// enough for our one-shot usage — should be called once at startup.
+///
+/// Two rules: the dimmer's semi-transparent fill, and a transparent
+/// background for the menu window so its (otherwise opaque) GTK theme
+/// background does not block the dimmer behind a transparent page.
+pub fn install_surface_css() {
     let provider = CssProvider::new();
-    provider.load_from_data("window.glogout-dimmer { background: rgba(18, 18, 22, 0.6); }");
+    provider.load_from_data(
+        "window.glogout-dimmer { background: rgba(18, 18, 22, 0.6); }\n\
+         window.glogout-menu { background: transparent; }",
+    );
     if let Some(display) = gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
             &display,
