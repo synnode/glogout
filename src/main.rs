@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use gtk4::Window;
+use gtk4::{CssProvider, Window};
 use gtk4::glib::{self, MainLoop};
 use gtk4::prelude::*;
 use webkit6::prelude::*;
@@ -69,6 +69,11 @@ struct App {
     manager: UserContentManager,
     escape_hook: EscapeHook,
     close_on_escape: bool,
+    /// The application-scoped CSS provider carrying the dimmer fill and the
+    /// menu-window transparency. Kept so hot reload can re-feed it with the
+    /// updated dimmer settings instead of restarting the daemon. `None` only
+    /// if there was no default display at startup.
+    dimmer_provider: Option<CssProvider>,
 }
 
 impl App {
@@ -135,7 +140,7 @@ fn build_app() -> Result<App> {
         .context("could not pick a menu monitor")?
         .clone();
 
-    window::install_surface_css(
+    let dimmer_provider = window::install_surface_css(
         &loaded.config.settings.dimmer_color,
         loaded.config.settings.dimmer_opacity,
     );
@@ -172,6 +177,7 @@ fn build_app() -> Result<App> {
         manager,
         escape_hook,
         close_on_escape: loaded.config.settings.close_on_escape,
+        dimmer_provider,
     })
 }
 
@@ -253,9 +259,10 @@ fn install_watch(app: &App) -> Option<watch::Handle> {
             let dir = dir.to_path_buf();
             let dispatcher = app.dispatcher.clone();
             let webview = app.webview.clone();
+            let dimmer_provider = app.dimmer_provider.clone();
             glib::MainContext::default().spawn_local(async move {
                 while rx.recv().await.is_ok() {
-                    reload(&dir, &dispatcher, &webview);
+                    reload(&dir, &dispatcher, &webview, dimmer_provider.as_ref());
                 }
             });
             Some(handle)
@@ -267,11 +274,16 @@ fn install_watch(app: &App) -> Option<watch::Handle> {
     }
 }
 
-/// Re-read the config from `dir`, rebuild the menu HTML, swap the
-/// dispatcher in place, and tell the webview to reload. Parse and read
-/// errors are logged and the previous state is kept — a half-edited
-/// config never bricks the open overlay.
-fn reload(dir: &Path, dispatcher: &Rc<RefCell<Dispatcher>>, webview: &WebView) {
+/// Re-read the config from `dir`, rebuild the menu HTML, swap the dispatcher
+/// in place, re-feed the dimmer CSS provider, and tell the webview to reload.
+/// Parse and read errors are logged and the previous state is kept — a
+/// half-edited config never bricks the open overlay.
+fn reload(
+    dir: &Path,
+    dispatcher: &Rc<RefCell<Dispatcher>>,
+    webview: &WebView,
+    dimmer_provider: Option<&CssProvider>,
+) {
     let cfg = match config::load_from(dir) {
         Ok(c) => c,
         Err(e) => {
@@ -281,6 +293,14 @@ fn reload(dir: &Path, dispatcher: &Rc<RefCell<Dispatcher>>, webview: &WebView) {
     };
     let built = ui::build(&cfg, Some(dir));
     *dispatcher.borrow_mut() = Dispatcher::new(&cfg.buttons);
+    // Update the live provider in place so dimmer changes take effect without
+    // restarting the daemon; GTK restyles the existing dimmer surfaces.
+    if let Some(provider) = dimmer_provider {
+        provider.load_from_data(&window::surface_css(
+            &cfg.settings.dimmer_color,
+            cfg.settings.dimmer_opacity,
+        ));
+    }
     webview.load_html(&built.html, None);
     eprintln!("glogout: config reloaded");
 }

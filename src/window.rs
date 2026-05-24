@@ -99,20 +99,27 @@ pub fn build_dimmer(monitor: &gdk::Monitor) -> Window {
 /// Two rules: the dimmer's semi-transparent fill, and a transparent
 /// background for the menu window so its (otherwise opaque) GTK theme
 /// background does not block the dimmer behind a transparent page.
-pub fn install_surface_css(dimmer_color: &str, dimmer_opacity: f64) {
-    let fill = dimmer_fill(dimmer_color, dimmer_opacity);
+pub fn install_surface_css(dimmer_color: &str, dimmer_opacity: f64) -> Option<CssProvider> {
+    let display = gdk::Display::default()?;
     let provider = CssProvider::new();
-    provider.load_from_data(&format!(
+    provider.load_from_data(&surface_css(dimmer_color, dimmer_opacity));
+    gtk4::style_context_add_provider_for_display(
+        &display,
+        &provider,
+        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+    Some(provider)
+}
+
+/// Build the surface CSS — the dimmer fill plus the menu-window transparency
+/// rule — for the given dimmer settings. Exposed so hot reload can re-feed an
+/// existing provider via `load_from_data` instead of stacking new providers.
+pub fn surface_css(dimmer_color: &str, dimmer_opacity: f64) -> String {
+    let fill = dimmer_fill(dimmer_color, dimmer_opacity);
+    format!(
         "window.glogout-dimmer {{ background: {fill}; }}\n\
          window.glogout-menu {{ background: transparent; }}"
-    ));
-    if let Some(display) = gdk::Display::default() {
-        gtk4::style_context_add_provider_for_display(
-            &display,
-            &provider,
-            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
-    }
+    )
 }
 
 /// Build the dimmer's `rgba(...)` fill from a `#RRGGBB`/`#RGB` color and an
