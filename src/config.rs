@@ -15,6 +15,28 @@ pub struct Settings {
     pub close_on_escape: bool,
     pub close_on_focus_loss: bool,
     pub output: Option<String>,
+    /// Dimmer fill color as `#RRGGBB` (or `#RGB`). Combined with
+    /// `dimmer_opacity` into the rgba() applied to every dimmer surface.
+    pub dimmer_color: String,
+    /// Dimmer opacity, 0.0 (fully see-through) to 1.0 (opaque). Accepts an
+    /// integer or float in TOML so a bare `0` or `1` parses too.
+    #[serde(deserialize_with = "de_opacity")]
+    pub dimmer_opacity: f64,
+}
+
+/// Accept either a float (`0.6`) or an integer (`0`, `1`) for opacity, so a
+/// user writing a whole number doesn't fail the whole config parse.
+fn de_opacity<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum FloatOrInt {
+        Float(f64),
+        Int(i64),
+    }
+    Ok(match FloatOrInt::deserialize(deserializer)? {
+        FloatOrInt::Float(f) => f,
+        FloatOrInt::Int(i) => i as f64,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +68,8 @@ impl Default for Settings {
             close_on_escape: true,
             close_on_focus_loss: true,
             output: None,
+            dimmer_color: "#121216".into(),
+            dimmer_opacity: 0.6,
         }
     }
 }

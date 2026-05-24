@@ -135,7 +135,10 @@ fn build_app() -> Result<App> {
         .context("could not pick a menu monitor")?
         .clone();
 
-    window::install_surface_css();
+    window::install_surface_css(
+        &loaded.config.settings.dimmer_color,
+        loaded.config.settings.dimmer_opacity,
+    );
 
     let main_loop = MainLoop::new(None, false);
 

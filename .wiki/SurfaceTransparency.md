@@ -17,7 +17,9 @@ Getting a transparent menu down to the desktop requires clearing background at *
 
 ## Dimmer
 
-Dimmers are separate windows on `Layer::Top` with `window.glogout-dimmer { background: rgba(18,18,22,0.6) }` (semi-transparent — proves layer-shell alpha compositing works). The menu floats above on `Layer::Overlay`. The dimmer color/opacity is currently hardcoded in `install_surface_css`; see roadmap to make it configurable.
+Dimmers are separate windows on `Layer::Top` with `window.glogout-dimmer { background: rgba(r,g,b,a) }` (semi-transparent — proves layer-shell alpha compositing works). The menu floats above on `Layer::Overlay`.
+
+The dimmer fill is configurable via `[settings]`: `dimmer_color` (`#RRGGBB`/`#RGB`, default `#121216`) and `dimmer_opacity` (0.0–1.0, default 0.6). `window.rs::dimmer_fill` parses the hex, clamps opacity, and builds the rgba; bad color falls back to the default dark color while keeping the requested opacity. `dimmer_opacity` deserializes from int or float (`config.rs::de_opacity`) so a bare `0`/`1` doesn't fail the whole parse. Set `dimmer_opacity = 0.0` for a fully transparent overlay (desktop shows through).
 
 ## Related
 - [[MultiMonitorPlacement]] — why every monitor is dimmed and the menu/dimmer layer split

@@ -6,7 +6,7 @@ use crate::ui::{DEFAULT_CSS, DEFAULT_TEMPLATE};
 
 /// Hand-written so it carries comments and a sensible structure that the
 /// auto-generated serde output would not produce.
-const DEFAULT_CONFIG_TOML: &str = r#"# glogout config — see https://github.com/synnode/glogout
+const DEFAULT_CONFIG_TOML: &str = r##"# glogout config — see https://github.com/synnode/glogout
 
 [settings]
 # Close the menu when Escape is pressed.
@@ -19,6 +19,12 @@ close_on_focus_loss = true
 # Pin the menu to a specific output by connector name (e.g. "DP-1").
 # Leave commented out to use the focused output.
 # output = "DP-1"
+
+# Dimmer overlay drawn behind the menu on every monitor. dimmer_color is
+# #RRGGBB; dimmer_opacity is 0.0 (fully see-through, shows your desktop) to
+# 1.0 (opaque). Lower the opacity to let the desktop shine through.
+# dimmer_color = "#121216"
+# dimmer_opacity = 0.6
 
 [[buttons]]
 id = "logout"
@@ -43,7 +49,7 @@ action = "cancel"   # built-in: just close the menu
 # Other available built-ins: shutdown, suspend, hibernate, lock.
 # For anything else, use `command = "..."` instead of `action = "..."`.
 # Commands run via `sh -c` so quoting, pipes, and env vars work as expected.
-"#;
+"##;
 
 pub fn run(force: bool) -> Result<()> {
     let dir = target_dir().context("could not determine config directory")?;

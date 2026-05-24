@@ -55,6 +55,8 @@ This creates `~/.config/glogout/{config.toml,style.css,template.html}`.
 close_on_escape = true
 close_on_focus_loss = true     # reserved; currently a no-op
 # output = "DP-1"              # pin to a specific monitor (connector name)
+# dimmer_color = "#121216"     # dimmer overlay color (#RRGGBB)
+# dimmer_opacity = 0.6         # 0.0 = see-through (shows desktop), 1.0 = opaque
 
 [[buttons]]
 id = "logout"

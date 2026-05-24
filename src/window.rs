@@ -99,18 +99,74 @@ pub fn build_dimmer(monitor: &gdk::Monitor) -> Window {
 /// Two rules: the dimmer's semi-transparent fill, and a transparent
 /// background for the menu window so its (otherwise opaque) GTK theme
 /// background does not block the dimmer behind a transparent page.
-pub fn install_surface_css() {
+pub fn install_surface_css(dimmer_color: &str, dimmer_opacity: f64) {
+    let fill = dimmer_fill(dimmer_color, dimmer_opacity);
     let provider = CssProvider::new();
-    provider.load_from_data(
-        "window.glogout-dimmer { background: rgba(18, 18, 22, 0.6); }\n\
-         window.glogout-menu { background: transparent; }",
-    );
+    provider.load_from_data(&format!(
+        "window.glogout-dimmer {{ background: {fill}; }}\n\
+         window.glogout-menu {{ background: transparent; }}"
+    ));
     if let Some(display) = gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
             &display,
             &provider,
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
+    }
+}
+
+/// Build the dimmer's `rgba(...)` fill from a `#RRGGBB`/`#RGB` color and an
+/// opacity. Opacity is clamped to 0.0..=1.0. If the color can't be parsed we
+/// warn and keep the requested opacity over the default dark color, so a
+/// typo dims as expected instead of silently producing an invalid rule.
+fn dimmer_fill(color: &str, opacity: f64) -> String {
+    let opacity = opacity.clamp(0.0, 1.0);
+    let (r, g, b) = parse_hex(color).unwrap_or_else(|| {
+        eprintln!("glogout: invalid dimmer_color {color:?}; expected #RRGGBB — using default");
+        (18, 18, 22)
+    });
+    format!("rgba({r}, {g}, {b}, {opacity})")
+}
+
+/// Parse `#RRGGBB` or `#RGB` (leading `#` optional) into (r, g, b).
+fn parse_hex(color: &str) -> Option<(u8, u8, u8)> {
+    let hex = color.trim().trim_start_matches('#');
+    let hex = match hex.len() {
+        3 => hex.chars().flat_map(|c| [c, c]).collect::<String>(),
+        6 => hex.to_string(),
+        _ => return None,
+    };
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some((r, g, b))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_six_and_three_digit_hex_with_optional_hash() {
+        assert_eq!(parse_hex("#121216"), Some((18, 18, 22)));
+        assert_eq!(parse_hex("121216"), Some((18, 18, 22)));
+        assert_eq!(parse_hex("#abc"), Some((0xaa, 0xbb, 0xcc)));
+    }
+
+    #[test]
+    fn rejects_malformed_hex() {
+        assert_eq!(parse_hex("#12"), None);
+        assert_eq!(parse_hex("#zzzzzz"), None);
+        assert_eq!(parse_hex(""), None);
+    }
+
+    #[test]
+    fn fill_clamps_opacity_and_falls_back_on_bad_color() {
+        assert_eq!(dimmer_fill("#121216", 0.6), "rgba(18, 18, 22, 0.6)");
+        assert_eq!(dimmer_fill("#121216", 2.0), "rgba(18, 18, 22, 1)");
+        assert_eq!(dimmer_fill("#121216", -1.0), "rgba(18, 18, 22, 0)");
+        // bad color keeps the requested opacity over the default dark color
+        assert_eq!(dimmer_fill("nope", 0.3), "rgba(18, 18, 22, 0.3)");
     }
 }
 
