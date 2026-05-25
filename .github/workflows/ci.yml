@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build (release)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # System libraries the gtk4 / gtk4-layer-shell / webkit6 crates link against.
+      # ubuntu-24.04 ships GTK 4.14, which is the minimum glogout requires.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev \
+            libgtk4-layer-shell-dev \
+            libwebkitgtk-6.0-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked
