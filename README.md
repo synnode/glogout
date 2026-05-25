@@ -56,7 +56,6 @@ This creates `~/.config/glogout/{config.toml,style.css,template.html}`.
 ```toml
 [settings]
 close_on_escape = true
-close_on_focus_loss = true     # reserved; currently a no-op
 # output = "DP-1"              # pin to a specific monitor (needs daemon restart)
 # dimmer_color = "#121216"     # dimmer overlay color (#RRGGBB)
 # dimmer_opacity = 0.6         # 0.0 = see-through (shows desktop), 1.0 = opaque
@@ -110,6 +109,82 @@ For full layout control, edit `template.html`. Available placeholders:
 - `{{buttons}}` — the rendered button list, in config order
 - `{{script}}` — the click/keybind dispatcher (don't omit this)
 - `{{username}}` / `{{hostname}}` — current `$USER` and `/etc/hostname`
+
+### Button anatomy
+
+`{{buttons}}` expands to one `<button>` per `[[buttons]]` entry, wrapped in a
+`.menu` container inside a `.layout` column. Each button is generated like this
+— the `.kbd` and `.icon` spans appear **only** when you set `keybind`/`icon`,
+and the **label span has no class**:
+
+```html
+<div class="layout">
+  <div class="menu">
+    <button data-action="logout" data-keybind="l" autofocus>
+      <span class="kbd">l</span>      <!-- only if keybind is set -->
+      <span class="icon">⏻</span>     <!-- only if icon is set -->
+      <span>Log out</span>            <!-- label: NO class -->
+    </button>
+    <!-- ...one <button> per config entry, in order... -->
+  </div>
+  <div class="hint">Press a key, click a button, or hit Esc to cancel</div>
+</div>
+```
+
+`data-action` is the button's `id`; the first button gets `autofocus`. Selector
+reference for your `style.css`:
+
+| Selector | Targets |
+|---|---|
+| `.layout` | outer column wrapping the buttons and the hint |
+| `.menu` | the button container (default: a horizontal grid) |
+| `button` | every button |
+| `button[data-action="logout"]` | one specific button, by its config `id` |
+| `button:focus-visible` | the keyboard-focused button |
+| `.icon` | the icon span (present only if `icon` is set) |
+| `.kbd` | the keybind badge (present only if `keybind` is set) |
+| `button > span:last-child` | the label text (it has no class of its own) |
+| `.hint` | the footer hint line |
+
+So to restyle just the cancel button and the labels:
+
+```css
+button[data-action="cancel"] { opacity: 0.7; }
+button > span:last-child { font-weight: 600; letter-spacing: 0.02em; }
+```
+
+### Frosted-glass blur
+
+CSS `backdrop-filter: blur()` **cannot** blur your desktop. A web engine only
+samples its own document, so with a transparent page there is nothing behind
+`body` to blur — it's a no-op for desktop show-through. Real frosted glass is
+**compositor blur**. Every glogout surface sets its layer-shell namespace to
+`glogout`, so you can target it with a Hyprland layer rule (needs the global
+`decoration { blur { enabled = true } }`, which is on by default). Pair it with a
+low `dimmer_opacity`.
+
+The rule syntax is Hyprland-version-dependent:
+
+```ini
+# Hyprland < 0.53 (classic)
+layerrule = blur, glogout
+layerrule = ignorezero, glogout
+
+# Hyprland 0.53–0.55 (structured rule blocks).
+# The classic comma form errors here; ignorezero became ignore_alpha (0.0–1.0).
+layerrule {
+    name = glogout-blur
+    match:namespace = ^glogout$
+    blur = true
+    ignore_alpha = 0.0
+}
+```
+
+On 0.55+ you can also use the Lua config form:
+
+```lua
+hl.layer_rule({ match = { namespace = "^glogout$" }, blur = true, ignore_alpha = 0.0 })
+```
 
 ## One-shot vs daemon
 
@@ -191,6 +266,11 @@ gtk4::Window  ── promoted via gtk4-layer-shell to a wlr-layer-shell overlay
 ```
 
 The stack is Linux-only on purpose. No `tao`, no `wry`. Earlier prototypes used `wry`, which still pulls in `webkit2gtk` (GTK 3) and crashes on Hyprland's explicit-sync surfaces (GTK 3 bug, fixed in GTK 4, not backported). See `.wiki/StackDecision.md` for the full debugging trail.
+
+## Known limitations
+
+- **`output` placement on Hyprland is timing-sensitive.** The menu grabs the keyboard exclusively, and Hyprland places keyboard-grabbing layer surfaces on the *focused* output, racing the `set_monitor` request. The passive dimmers honor `output` reliably; the menu itself does not in every build. In practice a `--release` binary applies `set_monitor` fast enough that the menu lands on the requested output (consistently observed across triggers from different screens), but a debug build often opens it on the cursor's monitor instead. Treat pinned `output` as reliable on release builds, not guaranteed — verify on your own setup. This is also why every monitor is dimmed rather than just the menu's.
+- **`output` changes need a daemon restart.** Re-anchoring rebuilds the layer surfaces, which the in-place reload path doesn't do.
 
 ## License
 
