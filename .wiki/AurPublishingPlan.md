@@ -1,58 +1,46 @@
 ---
 title: "AurPublishingPlan"
-tags: [planning, packaging, aur, crates-io, distribution]
+tags: [planning, packaging, aur, crates-io, distribution, release, runbook]
 related: ["DaemonMode"]
 updated: 2026-05-25
 ---
 
 # AurPublishingPlan
 
-Plan for shipping `glogout` publicly as part of the **1.0 release**. Distribution scope decided: **AUR + crates.io**.
+`glogout` 1.0.0 shipped publicly on **2026-05-25** to both **crates.io** and the **AUR**. This page is now the release runbook for future versions.
 
-## Prerequisites — status
+## Status — 1.0.0 DONE
 
-- **License — DONE.** MIT chosen; `LICENSE` file committed and `license = "MIT"` is in `Cargo.toml`. (Was the original open question; now resolved.)
-- **Public repo — DONE.** `git@github.com:synnode/glogout` exists and tags through `v0.3.0` are pushed. 1.0 adds a `v1.0.0` tag + GitHub release whose auto-generated tarball the AUR `source=()` pulls from.
-- **crates.io publish — IN SCOPE for 1.0.** Lets users `cargo install glogout` (the README promises this). `Cargo.toml` now carries the required metadata (`description`, `repository`, `homepage`, `readme`, `keywords`, `categories`). Run `cargo publish` after the version bump lands.
+- **License:** MIT (`LICENSE` + `Cargo.toml`).
+- **GitHub release:** tag `v1.0.0` + release at https://github.com/synnode/glogout/releases/tag/v1.0.0
+- **crates.io:** published — `cargo install glogout` works. `Cargo.toml` carries the publish metadata and an `exclude` list that keeps `.wiki/`, `glogout_spec.md`, `.mcp.json`, CI, and editor dirs out of the registry tarball (lean 17-file crate).
+- **AUR:** package `glogout` (source build), maintainer **Synnode**. PKGBUILD pulls the GitHub release tarball, builds with `cargo build --frozen --release`, installs binary + `contrib/glogout.service` + LICENSE + README. Validated with a local `makepkg` build (no clean chroot — `makechrootpkg`/devtools not installed on this machine).
+- **`glogout-bin`:** not done — optional, skipped for 1.0.
 
-## Packages to publish
+## Release runbook (repeat for each new version)
 
-Two AUR packages cover the typical preferences:
+1. Bump `version` in `Cargo.toml`, rebuild to sync `Cargo.lock`, commit.
+2. `git push origin main`; tag `vX.Y.Z` (annotated) and push it. *Add any `Cargo.toml` packaging tweaks before tagging so tag == published crate.*
+3. `gh release create vX.Y.Z --repo synnode/glogout --verify-tag ...`
+4. `cargo publish --dry-run` → check `cargo package --list` is lean → `cargo publish`. **Irreversible per version** (can only yank).
+5. AUR: in `/tmp/aur-glogout` (or a fresh clone of `ssh://aur@aur.archlinux.org/glogout.git`), update `pkgver`, run `updpkgsums`, `makepkg --printsrcinfo > .SRCINFO`, commit PKGBUILD + .SRCINFO, `git push origin master` (AUR uses the **master** branch).
 
-1. **`glogout`** — builds from source. PKGBUILD invokes `cargo build --release`, installs the binary, the systemd user unit from `contrib/`, and default configs into `/usr/share/glogout/`.
-2. **`glogout-bin`** — prebuilt tarball from a GitHub release. Faster install, for users without a Rust toolchain.
+## SSH gotcha for the AUR push (cost real time on 1.0)
 
-`-git` package is overkill for now; the regular package off tagged releases is enough.
+- AUR auth uses the **`id_rsa`** key (passphrase-protected); GitHub uses the passphraseless `id_ed25519`. `ssh -T aur@aur.archlinux.org` greets with **"Welcome to AUR, Synnode!"** when it works.
+- The agent must hold `id_rsa` **and the agent must be the one Claude's Bash tool sees.** Running `ssh-add` in a separate terminal does *not* share with the tool environment; running it **in-session via the `!` prefix** (`! ssh-add ~/.ssh/id_rsa`) does. Verify with `ssh-add -l` from a tool Bash call before pushing.
+- Do *not* add a passphraseless key to AUR just to automate — keep `id_rsa` and load it per session.
 
-## PKGBUILD sketch (source package)
+## PKGBUILD essentials (kept in `/tmp/aur-glogout`)
 
-Critical bits to remember when writing it:
+- `arch=('x86_64')`, `depends=('gtk4' 'gtk4-layer-shell' 'webkitgtk-6.0')`, `makedepends=('cargo')`, `optdepends=('systemd: ...')`.
+- `source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")`.
+- Install: binary `-Dm755` → `/usr/bin`; service/LICENSE/README `-Dm644` → systemd user dir / licenses / doc.
 
-- `arch=('x86_64')` — webkit6 + gtk4-layer-shell aren't going to work cleanly elsewhere out of the box.
-- `depends=('gtk4' 'gtk4-layer-shell' 'webkitgtk-6.0')`
-- `makedepends=('rust' 'cargo')`
-- `optdepends=('systemd: for the user-service unit')`
-- Build: `cargo build --frozen --release --all-features` (use the lockfile for reproducibility).
-- Package step installs:
-  - `target/release/glogout` → `/usr/bin/glogout`
-  - `contrib/glogout.service` → `/usr/lib/systemd/user/glogout.service`
-  - `LICENSE` → `/usr/share/licenses/$pkgname/LICENSE`
-  - `README.md` → `/usr/share/doc/$pkgname/README.md`
+## Not yet / out of scope
 
-Use `install -Dm644 ...` for everything except the binary (which is `-Dm755`).
-
-## Why not flatpak / nix / .deb yet
-
-Out of scope. Nix flake would be a nice second package once AUR is up — the dependency closure is well-defined. .deb only matters if there's actual demand from Debian/Ubuntu users; layer-shell on those distros is patchy anyway.
-
-## Remaining steps for the 1.0 release
-
-1. Tag `v1.0.0` on GitHub + create the release (auto-tarball). *(outward-facing — confirm before pushing)*
-2. `cargo publish` to crates.io. *(outward-facing — irreversible per version)*
-3. Write PKGBUILD + `.SRCINFO` for `glogout`.
-4. Test in a clean Arch chroot via `extra-x86_64-build` or `makechrootpkg`.
-5. Submit to AUR.
-6. (Optional, if time allows) build `glogout-bin` PKGBUILD against the release tarball.
+- `glogout-bin` (prebuilt tarball package) — optional follow-up.
+- Nix flake, flatpak, .deb — out of scope; revisit only on demand.
 
 ## Related
-- [[DaemonMode]] — the systemd unit packaging needs to land alongside this
+- [[DaemonMode]] — the systemd unit packaging ships alongside this
