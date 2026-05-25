@@ -9,6 +9,17 @@ homepage = "https://github.com/synnode/glogout"
 readme = "README.md"
 keywords = ["wayland", "logout", "layer-shell", "hyprland", "webkit"]
 categories = ["command-line-utilities"]
+# Keep the published crate lean: ship only what an end user / packager needs.
+# Internal docs and tooling stay in the git repo but out of the registry tarball.
+exclude = [
+    ".wiki/",
+    ".docs/",
+    ".github/",
+    ".idea/",
+    ".claude/",
+    ".mcp.json",
+    "glogout_spec.md",
+]
 
 [dependencies]
 gtk4 = "0.11"
