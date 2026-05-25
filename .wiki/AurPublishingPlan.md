@@ -1,28 +1,26 @@
 ---
 title: "AurPublishingPlan"
-tags: [planning, packaging, aur, distribution]
+tags: [planning, packaging, aur, crates-io, distribution]
 related: ["DaemonMode"]
-updated: 2026-05-19
+updated: 2026-05-25
 ---
 
 # AurPublishingPlan
 
-Plan for shipping `glogout` to the AUR. Not yet started — picked up in a follow-up session.
+Plan for shipping `glogout` publicly as part of the **1.0 release**. Distribution scope decided: **AUR + crates.io**.
 
-## Open prerequisites
+## Prerequisites — status
 
-These should be settled before submitting a package:
-
-- **License.** README currently says `TBD`. AUR submission needs a real SPDX identifier. Most likely MIT or Apache-2.0 to match the Rust ecosystem default; needs an explicit decision.
-- **Public repo + tagged release.** AUR `source=()` pulls from a tarball. Either tag a `v0.1.0` on GitHub and use the auto-generated archive, or commit to releasing tagged tarballs for every bump.
-- **Crates.io publish?** Optional but useful — would let users skip the AUR entirely via `cargo install glogout`. Same versioning constraints either way.
+- **License — DONE.** MIT chosen; `LICENSE` file committed and `license = "MIT"` is in `Cargo.toml`. (Was the original open question; now resolved.)
+- **Public repo — DONE.** `git@github.com:synnode/glogout` exists and tags through `v0.3.0` are pushed. 1.0 adds a `v1.0.0` tag + GitHub release whose auto-generated tarball the AUR `source=()` pulls from.
+- **crates.io publish — IN SCOPE for 1.0.** Lets users `cargo install glogout` (the README promises this). `Cargo.toml` now carries the required metadata (`description`, `repository`, `homepage`, `readme`, `keywords`, `categories`). Run `cargo publish` after the version bump lands.
 
 ## Packages to publish
 
 Two AUR packages cover the typical preferences:
 
-1. **`glogout`** — builds from source. PKGBUILD invokes `cargo build --release`, installs the binary, the systemd user unit from `contrib/`, and a stub `glogout init`-ready set of default configs into `/usr/share/glogout/`.
-2. **`glogout-bin`** — prebuilt tarball from a GitHub release. Faster install, needed for users who don't want a full Rust toolchain.
+1. **`glogout`** — builds from source. PKGBUILD invokes `cargo build --release`, installs the binary, the systemd user unit from `contrib/`, and default configs into `/usr/share/glogout/`.
+2. **`glogout-bin`** — prebuilt tarball from a GitHub release. Faster install, for users without a Rust toolchain.
 
 `-git` package is overkill for now; the regular package off tagged releases is enough.
 
@@ -47,14 +45,14 @@ Use `install -Dm644 ...` for everything except the binary (which is `-Dm755`).
 
 Out of scope. Nix flake would be a nice second package once AUR is up — the dependency closure is well-defined. .deb only matters if there's actual demand from Debian/Ubuntu users; layer-shell on those distros is patchy anyway.
 
-## Steps for the next session
+## Remaining steps for the 1.0 release
 
-1. Decide on license, add `LICENSE` file, update `README.md`.
-2. Tag `v0.1.0` on GitHub.
+1. Tag `v1.0.0` on GitHub + create the release (auto-tarball). *(outward-facing — confirm before pushing)*
+2. `cargo publish` to crates.io. *(outward-facing — irreversible per version)*
 3. Write PKGBUILD + `.SRCINFO` for `glogout`.
 4. Test in a clean Arch chroot via `extra-x86_64-build` or `makechrootpkg`.
 5. Submit to AUR.
-6. (Optional, same session if time allows) build `glogout-bin` PKGBUILD against the release tarball.
+6. (Optional, if time allows) build `glogout-bin` PKGBUILD against the release tarball.
 
 ## Related
 - [[DaemonMode]] — the systemd unit packaging needs to land alongside this
