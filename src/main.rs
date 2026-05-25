@@ -171,9 +171,6 @@ fn build_app() -> Result<App> {
         surfaces.push(window::build_dimmer(monitor));
     }
 
-    // TODO settings.close_on_focus_loss: focus events under
-    // KeyboardMode::Exclusive don't fire predictably; needs investigation.
-
     Ok(App {
         main_loop,
         surfaces,

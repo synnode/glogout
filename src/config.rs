@@ -13,7 +13,6 @@ pub struct Config {
 #[serde(default)]
 pub struct Settings {
     pub close_on_escape: bool,
-    pub close_on_focus_loss: bool,
     pub output: Option<String>,
     /// Dimmer fill color as `#RRGGBB` (or `#RGB`). Combined with
     /// `dimmer_opacity` into the rgba() applied to every dimmer surface.
@@ -66,7 +65,6 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             close_on_escape: true,
-            close_on_focus_loss: true,
             output: None,
             dimmer_color: "#121216".into(),
             dimmer_opacity: 0.6,
