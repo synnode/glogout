@@ -278,4 +278,4 @@ MIT — see [LICENSE](LICENSE). Do whatever you want with it; just keep the copy
 
 ## Status
 
-`v0.3.0`. Phases 1–4 complete — config + theming, hot reload, daemon mode, multi-monitor. Configurable dimmer and fully hot-reloadable `[settings]` (except `output`). Daily-driven on Hyprland; the spec checklist is the authoritative roadmap. Bug reports and theming PRs welcome.
+`v1.0.0`. Config + theming, hot reload, daemon mode, multi-monitor, configurable dimmer, and fully hot-reloadable `[settings]` (except `output`). Daily-driven on Hyprland. Stable and considered feature-complete for its scope; bug reports and theming PRs welcome.
