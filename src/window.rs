@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{CssProvider, EventControllerKey, Window, gdk};
@@ -194,6 +197,41 @@ pub fn enumerate_monitors() -> Vec<gdk::Monitor> {
     (0..monitors.n_items())
         .filter_map(|i| monitors.item(i)?.downcast::<gdk::Monitor>().ok())
         .collect()
+}
+
+/// Watch the GDK monitor list and rebuild `dimmers` whenever it changes.
+///
+/// The dimmer set is computed once from a snapshot at startup, but that
+/// snapshot can be incomplete — observed in the wild when a primary display
+/// hangs off a passthrough GPU and only switches over to the main GPU a few
+/// seconds into boot, after the daemon has already enumerated. Without this
+/// watcher the daemon would never carry a dimmer for that late-arriving
+/// output and the primary screen would stay bright while the rest dim.
+///
+/// On change: destroy the old dimmer windows, build fresh ones for every
+/// currently-connected monitor, and present them immediately if the menu is
+/// open right now. The menu window itself is left alone — it owns the
+/// WebKitGTK process we want to keep across hide/show in daemon mode.
+pub fn watch_monitor_changes(dimmers: Rc<RefCell<Vec<Window>>>, menu_window: Window) {
+    let Some(display) = gdk::Display::default() else {
+        return;
+    };
+    let monitors_model = display.monitors();
+    monitors_model.connect_items_changed(move |_, _, _, _| {
+        let new_monitors = enumerate_monitors();
+        let was_visible = menu_window.is_visible();
+        let mut dimmers = dimmers.borrow_mut();
+        for old in dimmers.drain(..) {
+            old.destroy();
+        }
+        for monitor in &new_monitors {
+            let dimmer = build_dimmer(monitor);
+            if was_visible {
+                dimmer.present();
+            }
+            dimmers.push(dimmer);
+        }
+    });
 }
 
 /// Pick the menu monitor: the one matching `wanted` (by connector name).

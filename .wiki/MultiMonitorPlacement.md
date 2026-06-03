@@ -2,12 +2,12 @@
 title: "MultiMonitorPlacement"
 tags: [multi-monitor, layer-shell, hyprland, gotcha, window]
 related: ["StackDecision", "DaemonMode"]
-updated: 2026-05-23
+updated: 2026-06-03
 ---
 
 # MultiMonitorPlacement
 
-The menu sits on `Layer::Overlay`; the dimmers sit on `Layer::Top`; **every** monitor gets a dimmer including the menu's own. This layout is a deliberate robustness measure — do not "simplify" it back to dimming only the non-menu monitors without re-reading the history below.
+The menu sits on `Layer::Overlay`; the dimmers sit on `Layer::Top`; **every** monitor gets a dimmer including the menu's own. The dimmer set is also rebuilt on `gdk::Display::monitors()` items-changed, because the startup snapshot can be incomplete. This layout is a deliberate robustness measure — do not "simplify" it back to dimming only the non-menu monitors without re-reading the history below.
 
 ## The bug it fixed
 
@@ -24,6 +24,14 @@ Two distinct causes were in play:
 Because cause #2 is timing-sensitive rather than fully understood, dimming **all** monitors (dropped the old `if monitor != &menu_monitor` skip) is kept as a safety net: if placement ever flips back to cursor-following (slower machine, heavy load, a different compositor), every screen still darkens and the menu — on the higher Overlay layer — stays visible on whichever output it lands. With the old skip, a flipped placement would leave the intended menu monitor bright and undimmed.
 
 `pick_menu_monitor` / `settings.output` / the (0,0) primary heuristic decide where the menu is *requested*; in release builds on Hyprland that request is honored.
+
+## Late-arriving monitor (the boot-time GPU/source race)
+
+Even with every-monitor dimming, one failure mode persisted in daemon mode: build_app's `enumerate_monitors()` is a single snapshot of `gdk::Display::default().monitors()` taken at daemon start, and if the snapshot is missing an output that comes online seconds later, that output never gets a dimmer. Observed in the wild on a multi-GPU rig where the primary briefly attaches to a passthrough HDMI on the secondary GPU during boot before switching back to DP on the main GPU. The user saw: menu lands on cursor monitor (which had a dimmer), but the real primary stayed bright because no dimmer was ever built for it. Cause #2 above hid the underlying cause-#3 here for a while because the visible symptom (menu on cursor monitor) looked like a recurrence of the timing race.
+
+Fix: `window::watch_monitor_changes` connects an `items-changed` handler on the GDK monitor list (`src/window.rs`). On every delta it destroys the existing dimmer windows, rebuilds one per currently-connected monitor via `build_dimmer`, and presents the new ones immediately if the menu is currently visible. The menu window is left untouched — it owns the WebKitGTK process that [[DaemonMode]] is built around keeping alive across hide/show, so rebuilding it would cost that whole optimization. The `App.dimmers` field is therefore `Rc<RefCell<Vec<Window>>>` rather than part of an immutable `surfaces` Vec.
+
+If a monitor change arrives while glogout is open, the user sees a brief flicker as the dimmer set is swapped — accepted, because the OS-level layout switch that triggered the items-changed is itself a visible event, so an extra flicker is in line with what the user already expects in that moment.
 
 ## Known cosmetic consequence
 

@@ -62,7 +62,13 @@ fn main() -> Result<()> {
 /// the config dir (used by the hot-reload watcher).
 struct App {
     main_loop: MainLoop,
-    surfaces: Vec<Window>,
+    menu_window: Window,
+    /// Dimmer windows, one per currently-connected monitor. Mutable because
+    /// the GDK monitor list can change after daemon start — late-arriving
+    /// outputs (e.g. a primary that comes up on the wrong GPU at boot and
+    /// switches over a few seconds later) need their own dimmer, which only
+    /// the items-changed watcher can build.
+    dimmers: Rc<RefCell<Vec<Window>>>,
     webview: WebView,
     dispatcher: Rc<RefCell<Dispatcher>>,
     config_dir: Option<PathBuf>,
@@ -80,24 +86,23 @@ struct App {
 
 impl App {
     fn show(&self) {
-        for surface in &self.surfaces {
-            surface.present();
+        self.menu_window.present();
+        for dimmer in self.dimmers.borrow().iter() {
+            dimmer.present();
         }
     }
 
     fn hide(&self) {
-        for surface in &self.surfaces {
-            surface.set_visible(false);
+        self.menu_window.set_visible(false);
+        for dimmer in self.dimmers.borrow().iter() {
+            dimmer.set_visible(false);
         }
     }
 
     /// True when the menu surface is currently mapped. Used to decide
     /// what `toggle` should do.
     fn is_visible(&self) -> bool {
-        self.surfaces
-            .first()
-            .map(|s| s.is_visible())
-            .unwrap_or(false)
+        self.menu_window.is_visible()
     }
 
     fn toggle(&self) {
@@ -165,15 +170,21 @@ fn build_app() -> Result<App> {
     // output and drops it on the focused screen, so we can't reliably know
     // which monitor to leave undimmed. The layer split keeps the menu on top
     // of its own dimmer regardless.
-    let mut surfaces = Vec::with_capacity(monitors.len() + 1);
-    surfaces.push(menu_window);
-    for monitor in &monitors {
-        surfaces.push(window::build_dimmer(monitor));
-    }
+    let dimmers: Rc<RefCell<Vec<Window>>> = Rc::new(RefCell::new(
+        monitors.iter().map(window::build_dimmer).collect(),
+    ));
+
+    // The monitor list snapshot above can be incomplete — at boot, a primary
+    // attached to a passthrough GPU may show up on the wrong source for a few
+    // seconds before switching back, and a daemon that started during that
+    // window would otherwise never build a dimmer for it. Watch for the
+    // delta and rebuild the dimmer set when it changes.
+    window::watch_monitor_changes(dimmers.clone(), menu_window.clone());
 
     Ok(App {
         main_loop,
-        surfaces,
+        menu_window,
+        dimmers,
         webview: menu_webview,
         dispatcher,
         config_dir,
